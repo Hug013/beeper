@@ -169,10 +169,10 @@ Some variables in our application depend on the environment in which the applica
  
  In `api`, create a `.env` file with the following content:
  ```txt
-PGHOST=localhost
-PGPORT=5432
+PGHOST=localhost OU beeper-mines-nancy.tk
+PGPORT=5432      OU 45823
 PGUSER=postgres
-PGPASSWORD=example
+PGPASSWORD=example  OU le password de tout à l'heure
 PGDATABASE=postgres
 
 AUTH0_DOMAIN=dev-vdt8h6o8k0l5v2wj.us.auth0.com
@@ -361,6 +361,61 @@ export async function getHomeBeeps(userId) {
     `,
     [userId]
   );
+}
+
+```
+
+In `src/auth/auth0-client.js`:
+```js
+import { ManagementClient } from "auth0";
+import camelcaseKeys from "camelcase-keys";
+
+const auth0ApiClient = new ManagementClient({
+  domain: process.env.AUTH0_DOMAIN,
+  clientId: process.env.AUTH0_CLIENT_ID,
+  clientSecret: process.env.AUTH0_CLIENT_SECRET,
+  scope: "read:users",
+});
+
+export class UsernameNotFound extends Error {}
+
+export async function getAuth0UsersByIds(ids) {
+  return await getNormalizedUsers({
+    q: ids.map((id) => `user_id:${id}`).join(" OR "),
+  });
+}
+
+export async function getAuth0UserByUsername(username) {
+  const matchingUsers = await getNormalizedUsers({
+    q: `username:${username}`,
+  }); // /!\ since the username parameter is provided by users, there's probably room for query injection here
+
+  if (matchingUsers.length === 0) {
+    throw new UsernameNotFound(username);
+  }
+
+  if (matchingUsers.length > 1) {
+    throw new Error("Unexpected state: usernames should be unique");
+  }
+
+  return matchingUsers[0];
+}
+
+/*
+ * Wrapper around Auth0's getUsers that:
+ *   1. normalizes the keys to camel case
+ *   2. only keeps the fields that we actually want to expose to API clients
+ */
+async function getNormalizedUsers(params) {
+  const fullUsers = await auth0ApiClient.getUsers(params);
+
+  const camelCaseFullUsers = camelcaseKeys(fullUsers);
+
+  return camelCaseFullUsers.map((fullUser) => ({
+    userId: fullUser.userId,
+    username: fullUser.username,
+    picture: fullUser.picture,
+  }));
 }
 
 ```
